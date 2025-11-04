@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GR 대시보드</title>
+
+  <!-- CDN -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://code.highcharts.com/highcharts.js"></script>
+  <script src="https://code.highcharts.com/modules/exporting.js"></script>
+  <script src="https://code.highcharts.com/modules/accessibility.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+  <script src="common.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>Global Request 대시보드</h1>
+      <div class="toolbar">
+        <div id="updateDate" class="badge">Row-data Date: -</div>
+        <button id="resetBtn" class="btn">Reset</button>
+        <label class="btn" for="excelInput">파일 불러오기</label>
+        <input id="excelInput" type="file" accept=".xlsx,.xls,.csv" />
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel">
+      <div class="filters">
+        <div class="filter-box">
+          <h4>Month <button class="btn-mini" data-all="month">전체해제</button></h4>
+          <div id="monthBox" class="filter-list"></div>
+        </div>
+        <div class="filter-box">
+          <h4>Region <button class="btn-mini" data-all="region">전체해제</button></h4>
+          <div id="regionBox" class="filter-list"></div>
+        </div>
+        <div class="filter-box">
+          <h4>Locale <button class="btn-mini" data-all="proj">전체해제</button></h4>
+          <div id="projBox" class="filter-list"></div>
+        </div>
+        <div class="filter-box">
+          <h4>담당자 <button class="btn-mini" data-all="ownergrp">전체해제</button></h4>
+          <div id="ownerGrpBox" class="filter-list"></div>
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi info" id="kpi-total"><h3>건수</h3><div class="val">-</div></div>
+        <div class="kpi" id="kpi-new"><h3>사전검토</h3><div class="val">-</div></div>
+        <div class="kpi warn" id="kpi-inp"><h3>진행중</h3><div class="val">-</div></div>
+      </div>
+    </section>
+
+    <!-- 차트 -->
+    <div class="grid chart-wrap">
+      <section class="panel">
+        <div class="panel-title">
+          <h2>Total status</h2>
+          <div id="statusBadge" class="pill" style="display:none;">
+            선택: <span id="selStatusTxt"></span>
+            <button id="clearStatus" title="해제">✕</button>
+          </div>
+        </div>
+        <div id="chartStatusDonut" style="height:340px"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-title">
+          <h2>Task별 status</h2>
+          <div id="titleBadge" class="pill" style="display:none;">
+            선택: <span id="selTitleTxt"></span>
+            <button id="clearTitle" title="해제">✕</button>
+          </div>
+        </div>
+        <div class="bar-chart">
+          <div id="chartTitleStatus"></div>
+        </div>
+      </section>
+
+      <section class="panel list" id="summaryPanel">
+        <div class="panel-title">
+          <h2>Summary</h2>
+          <div class="pill">Page# Total: <span id="summaryPageTotal">0</span></div>
+        </div>
+        <table class="table" id="summaryTbl">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Page#</th>
+              <th>비율(%)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+
+    <!-- 상세 테이블 -->
+    <section class="panel list">
+      <div class="panel-title">
+        <h2>상세 리스트 <span>( i : Last comment )</span></h2>
+        <!-- ✅ 상단 Page# Total 배지 -->
+        <div id="pageTotalBadge" class="pill">Page# Total: <span id="pageTotalVal">0</span></div>
+      </div>
+      <table class="table" id="tbl">
+        <colgroup>
+          <col width="120px">
+          <col width="120px">
+          <col width="120px">
+          <col width="120px">
+          <col width="140px">
+          <col width="100px">
+          <col>
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Region</th>
+            <th>Locale</th>
+            <th>담당자</th>
+            <th>Request Date</th>
+            <th>
+              <select id="detailStatusFilter">
+                <option value="">Status 전체</option>
+                <option value="완료">완료</option>
+                <option value="법인리뷰">법인리뷰</option>
+                <option value="사전검토">사전검토</option>
+                <option value="진행중">진행중</option>
+                <option value="취소">취소</option>
+              </select>
+            </th>
+            <th>Page#</th>
+            <th>제목</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <div id="commentPop" class="comment-pop">
+    <h2 id="commentPopTitle"></h2>
+    <p id="commentPopText"></p>
+  </div>
+
+  <div class="top-btn">
+    <button class="btn" id="goTopBtn">Top</button>
+  </div>
+</body>
+</html>
