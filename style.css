@@ -82,6 +82,7 @@ input[type="file"] {
 	gap:16px;
 	margin-top:16px
 }
+.grid .list{margin-top: 0;}
 @media (max-width:1100px) {
 	.grid {
 		grid-template-columns:1fr
