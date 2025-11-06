@@ -381,10 +381,15 @@ table select {
 }
 .wpl-name{
   display:inline-block;
-  max-width:160px;         /* 필요시 조절 */
+  max-width:100px;      
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
   vertical-align:bottom;
 }
-.chip .tip-btn{ margin-left:6px; }
+.chip .tip-btn{ 
+	display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
