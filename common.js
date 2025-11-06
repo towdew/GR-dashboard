@@ -1,13 +1,14 @@
 // common.js
 (function () {
-  // ====== Google Sheet CSV URL ======
+  // ====== External URLs ======
   const DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS7WIgpgiy-yAbJNaLbF3Vm4p9qPxi_WpHtW8yWi4MeCUigElvsY7y3T-E6OG5kIxH711SSwfBPtFG7/pub?gid=0&single=true&output=csv";
+  const WPL_JSON_URL = "wpllist.json";
 
   // ===== 상태 =====
   let allRows = [], rows = [];
-  let selectedStatus = null;   // 도넛 선택 상태
-  let selectedTitle  = null;   // 막대에서 선택한 제목
-  let detailStatusFilter = ""; // 상세리스트 Status 셀렉트 값
+  let selectedStatus = null;
+  let selectedTitle  = null;
+  let detailStatusFilter = "";
 
   // ===== DOM =====
   const updateDate      = document.getElementById("updateDate");
@@ -25,13 +26,13 @@
   const resetBtn        = document.getElementById("resetBtn");
   const detailStatusSel = document.getElementById("detailStatusFilter");
 
-  // ✅ 요약 패널 & Page# Total 배지
+  // ===== 요약 패널 & Page# Total =====
   const summaryPanel      = document.getElementById("summaryPanel");
   const summaryTblBody    = document.querySelector("#summaryTbl tbody");
   const summaryPageTotal  = document.getElementById("summaryPageTotal");
   const pageTotalVal      = document.getElementById("pageTotalVal");
 
-  // 팝오버 DOM
+  // ===== 팝오버 =====
   const commentPop      = document.getElementById('commentPop');
   const commentPopTitle = document.getElementById('commentPopTitle');
   const commentPopText  = document.getElementById('commentPopText');
@@ -41,19 +42,45 @@
     commentPop.style.zIndex   = '9999';
   }
 
-  // ===== 데이터 로드 =====
-  window.addEventListener("load", () => {
+  // ===== WPL JSON =====
+  let wplInfoByLocale = {};
+  async function loadWPLJson() {
+    try {
+      const res = await fetch(WPL_JSON_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      wplInfoByLocale = await res.json();
+      console.log("WPL JSON loaded:", Object.keys(wplInfoByLocale).length);
+    } catch (err) {
+      console.error("Failed to load WPL JSON:", err);
+      wplInfoByLocale = {};
+    }
+  }
+  function getWPLByLocale(locale) {
+    const k = locale || "";
+    return (
+      wplInfoByLocale[k] ||
+      wplInfoByLocale[k.toLowerCase?.()] ||
+      wplInfoByLocale[k.toUpperCase?.()] ||
+      null
+    );
+  }
+
+  // ===== 초기 로드 =====
+  window.addEventListener("load", async () => {
+    await loadWPLJson();
     if (location.protocol === 'file:') {
-      console.log('file:// 모드 - CSV fetch 생략. 상단의 "파일 불러오기"로 데이터를 로드하세요.');
+      console.log('file:// 모드 - CSV fetch 생략.');
       return;
     }
-    loadFromUrl(DATA_URL).catch(err => {
+    try {
+      await loadFromUrl(DATA_URL);
+    } catch (err) {
       console.error(err);
       alert("데이터를 불러오지 못했습니다.");
-    });
+    }
   });
 
-  // ====== URL 로딩 함수 (CSV -> Workbook) ======
+  // ===== CSV URL 로딩 =====
   async function loadFromUrl(url) {
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) throw new Error("HTTP Error " + res.status);
@@ -62,7 +89,7 @@
     await loadWorkbook(wb);
   }
 
-  // ====== 업로드 파일 로딩 (xlsx/csv) ======
+  // ===== 업로드 파일 로딩 =====
   async function loadFile(file) {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array" });
@@ -85,8 +112,6 @@
     (s ?? "")
       .toString()
       .replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
-
-  // ✅ Page# → 숫자 파싱 (없으면 1로 가정)
   function parsePageNum(v) {
     if (v == null) return 1;
     if (typeof v === "number" && !isNaN(v)) return Math.max(1, Math.round(v));
@@ -97,7 +122,7 @@
     return Math.max(1, sum);
   }
 
-  // ===== Locale 보정/추출 =====
+  // ===== Locale =====
   const normalizeLocale = (loc) => {
     const v = (loc || "").toString().trim();
     if (/^I$/i.test(v)) return "IR-ar";
@@ -127,7 +152,7 @@
   };
   const groupRequester = (v) => emailGroupMap[extractEmail(v)] || "그외";
 
-  // ===== 상태 그룹 매핑 =====
+  // ===== 상태 그룹 =====
   function mapStatusGrouped(raw) {
     const s = (raw || "").toString().trim();
     const sl = s.toLowerCase();
@@ -140,7 +165,7 @@
     return null;
   }
 
-  // ===== 공통 워크북 처리 =====
+  // ===== 워크북 처리 =====
   async function loadWorkbook(wb) {
     const sheetName = wb.SheetNames.includes("raw") ? "raw" : wb.SheetNames[0];
     const sheet = wb.Sheets[sheetName];
@@ -181,29 +206,22 @@
         const subcat   = norm(r["Sub Category"] || "");
         const ownerRaw = r["BU Requestor Name"] || r["Requestor"] || r["Requester"] || "";
         const ownerGrp = groupRequester(ownerRaw);
-        const date = parseDate(r["PTT submit date"]);
+        const date     = parseDate(r["Target staging date"]);
         const month    = date ? `${date.getUTCMonth() + 1}월` : null;
         const id       = norm(r["PTT Task ID"] || r["GR ID"] || r["ID"] || "");
-
-        // Page#
-        const pgRaw  = r["Pg#"] ?? r["Page#"] ?? r["PgNo"] ?? r["Page No"] ?? r["Page"];
-        const pageNo = pgRaw == null ? "" : (typeof pgRaw === "number" ? String(pgRaw) : norm(pgRaw));
-        const pageNum = parsePageNum(pgRaw); // ✅ 계산용 숫자
-
+        const pgRaw    = r["Pg#"] ?? r["Page#"] ?? r["PgNo"] ?? r["Page No"] ?? r["Page"];
+        const pageNo   = pgRaw == null ? "" : (typeof pgRaw === "number" ? String(pgRaw) : norm(pgRaw));
+        const pageNum  = parsePageNum(pgRaw);
         const cancelReason = norm(r["Cancelled Reason"] || r["Cancel Reason"] || "");
         const lastComment  = norm(r["Last comment"] || r["Last Comment"] || r["Last update"] || "");
-
-        // 제목 prefix 제거
-        let rawTitle = norm(r["Global Request Title"] || r["Title"] || r["Description"] || "");
-        rawTitle = rawTitle.replace(/^GR\d+-W\d+-\s*/i, "");
-        rawTitle = rawTitle.replace(/^GR[0-9A-Za-z\-]+-\s*/i, "");
-        const title = rawTitle;
-
+        let rawTitle  = norm(r["Global Request Title"] || r["Title"] || r["Description"] || "");
+        rawTitle      = rawTitle.replace(/^GR\d+-W\d+-\s*/i, "");
+        rawTitle      = rawTitle.replace(/^GR[0-9A-Za-z\-]+-\s*/i, "");
+        const title   = rawTitle;
         const statusRaw = r["Task Status in PTT"] || r["Status"] || "";
         const statusGrp = mapStatusGrouped(statusRaw);
 
-        return { region, proj, locale, subcat, ownerGrp, date, month, id,
-                 statusGrp, title, pageNo, pageNum, cancelReason, lastComment };
+        return { region, proj, locale, subcat, ownerGrp, date, month, id, statusGrp, title, pageNo, pageNum, cancelReason, lastComment };
       })
       .filter((r) => (r.region || r.id || r.title) && r.statusGrp);
   }
@@ -213,15 +231,12 @@
   function sortMonthDesc(arr) { return [...arr].filter(v => v).sort((a, b) => parseInt(b) - parseInt(a)); }
   function fillBox(box, values) {
     if (!box) return;
-    box.innerHTML = values
-      .map(
-        (v) => `<label class="filter-item">
-          <input type="checkbox" value="${escapeHtml(String(v))}"/>
-          <span class="checkmark"></span>
-          <span>${escapeHtml(String(v))}</span>
-        </label>`
-      )
-      .join("");
+    box.innerHTML = values.map((v) => `
+      <label class="filter-item">
+        <input type="checkbox" value="${escapeHtml(String(v))}"/>
+        <span class="checkmark"></span>
+        <span>${escapeHtml(String(v))}</span>
+      </label>`).join("");
     box.querySelectorAll('input[type="checkbox"]').forEach((cb) => cb.addEventListener("change", applyFilters));
   }
   function getChecked(box) {
@@ -244,12 +259,10 @@
     const order = ["김세준책임", "김진호선임", "이유진사원", "류예원책임", "그외"];
     const present = new Set(data.map((r) => r.ownerGrp));
     if (ownerGrpBox) {
-      ownerGrpBox.innerHTML = order
-        .filter((x) => present.has(x))
-        .map((v) => `<label class="filter-item">
-            <input type="checkbox" value="${v}"/><span class="checkmark"></span><span>${v}</span>
-          </label>`)
-        .join("");
+      ownerGrpBox.innerHTML = order.filter((x) => present.has(x)).map((v) => `
+        <label class="filter-item">
+          <input type="checkbox" value="${v}"/><span class="checkmark"></span><span>${v}</span>
+        </label>`).join("");
       ownerGrpBox.querySelectorAll('input[type="checkbox"]').forEach((cb) => cb.addEventListener("change", applyFilters));
     }
     fillBox(monthBox, sortMonthDesc(uniq(data.map((r) => r.month))));
@@ -320,7 +333,6 @@
                 } else {
                   statusBadge.style.display = "none";
                 }
-                // 상태 변경 시 요약/리스트도 갱신
                 renderStatusDonut();
                 renderTitleStatusChart();
                 renderSummaryForSelectedTitle();
@@ -335,9 +347,8 @@
     });
   }
 
-  // ===== 막대 (제목별 100% 스택) - ✅ Page# 가중치 기반 =====
+  // ===== 제목별 100% 스택 =====
   function computeTitleStatusByPages(data) {
-    // title → { totalPages, countsPages: {status: pages} }
     const bucket = new Map();
     for (const r of data) {
       const t = r.title || "—";
@@ -348,11 +359,9 @@
       b.countsPages[r.statusGrp] = (b.countsPages[r.statusGrp] || 0) + p;
     }
     const arr = [...bucket.entries()].map(([title, obj]) => ({ title, totalPages: obj.totalPages, countsPages: obj.countsPages }));
-    // 많은 페이지 순으로
     arr.sort((a, b) => b.totalPages - a.totalPages);
     return arr;
   }
-
   function renderTitleStatusChart() {
     const scoped = selectedStatus ? rows.filter(r => r.statusGrp === selectedStatus) : rows;
     const top = computeTitleStatusByPages(scoped);
@@ -371,14 +380,14 @@
     const seriesByGroup = { 완료:[], 법인리뷰:[], 사전검토:[], 진행중:[], 취소:[] };
     for (const item of top) {
       for (const s of statuses) {
-        seriesByGroup[s].push(item.countsPages[s] || 0); // ✅ page 수
+        seriesByGroup[s].push(item.countsPages[s] || 0);
       }
     }
 
     const makePoint = (g, idx, y) => {
       if (!selectedTitle) return { y };
       const titleAtIdx = top[idx]?.title || "";
-      if (titleAtIdx === selectedTitle) return { y }; // 강조
+      if (titleAtIdx === selectedTitle) return { y };
       const dim = Highcharts.color(palette[g]).setOpacity(0.35).get();
       return { y, color: dim };
     };
@@ -407,8 +416,7 @@
           let html = `<b>${escapeHtml(title)}</b><br/>총 Page#: ${totalPages.toLocaleString()}<br/>`;
           this.points.forEach(p => {
             const pct = totalPages ? (p.y/totalPages*100) : 0;
-            html += `<span style="color:${p.color}">\u25CF</span> ${p.series.name}: `
-                + `<b>${p.y.toLocaleString()} Page</b> (${Highcharts.numberFormat(pct,1)}%)<br/>`;
+            html += `<span style="color:${p.color}">\u25CF</span> ${p.series.name}: <b>${p.y.toLocaleString()} Page</b> (${Highcharts.numberFormat(pct,1)}%)<br/>`;
           });
           return html;
         }
@@ -418,10 +426,7 @@
           stacking: 'percent',
           pointPadding: 0,
           groupPadding: 0.08,
-          dataLabels: {
-            enabled: true,
-            formatter(){ return this.percentage > 15 ? Math.round(this.percentage) + '%' : null; }
-          }
+          dataLabels: { enabled: true, formatter(){ return this.percentage > 15 ? Math.round(this.percentage) + '%' : null; } }
         },
         bar: {
           borderWidth: 0,
@@ -431,7 +436,6 @@
               click: function(){
                 const idx = this.index;
                 const fullTitle = top[idx]?.title ?? this.category;
-
                 selectedTitle = (selectedTitle === fullTitle) ? null : fullTitle;
                 if (selectedTitle){
                   selTitleTxt.textContent = selectedTitle;
@@ -439,16 +443,11 @@
                 } else {
                   titleBadge.style.display = 'none';
                 }
-
                 renderTitleStatusChart();
-                // ✅ 선택 요약 표시/갱신
                 renderSummaryForSelectedTitle();
-                // 상세리스트 Status select reset
                 detailStatusFilter = "";
                 if (detailStatusSel) detailStatusSel.value = "";
                 renderTable();
-
-                // 테이블로 스크롤
                 const listPanel = document.querySelector('.panel.list:last-of-type');
                 if (listPanel) listPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }
@@ -467,54 +466,42 @@
     });
   }
 
-  // ===== 요약 패널 =====
+  // ===== 요약 =====
   function renderSummaryForSelectedTitle() {
     if (!summaryPanel || !summaryTblBody || !summaryPageTotal) return;
-
-    // 선택된 제목 기준 + 상위 상태/필터 반영
     const base = selectedStatus ? rows.filter(r => r.statusGrp === selectedStatus) : rows;
-
     if (!selectedTitle) {
       summaryTblBody.innerHTML = "";
       summaryPageTotal.textContent = "0";
       return;
     }
-
     const list = base.filter(r => r.title === selectedTitle);
     const totalPages = list.reduce((a,b)=>a+(b.pageNum||1),0);
     const statuses = ["완료","법인리뷰","사전검토","진행중","취소"];
     const pageByStatus = Object.fromEntries(statuses.map(s=>[s,0]));
     list.forEach(r => { pageByStatus[r.statusGrp] += (r.pageNum || 1); });
-
     summaryTblBody.innerHTML = statuses.map(s => {
       const pages = pageByStatus[s] || 0;
       const pct = totalPages ? (pages/totalPages*100) : 0;
-      return `<tr class="row">
-        <td>${s}</td>
-        <td>${pages.toLocaleString()}</td>
-        <td>${Highcharts.numberFormat(pct,1)}%</td>
-      </tr>`;
+      return `<tr class="row"><td>${s}</td><td>${pages.toLocaleString()}</td><td>${Highcharts.numberFormat(pct,1)}%</td></tr>`;
     }).join("");
-
     summaryPageTotal.textContent = totalPages.toLocaleString();
   }
 
-  // ===== 페이지 토탈 배지 갱신 =====
+  // ===== Page# Total =====
   function updateDetailPageTotalBadge(currentList) {
     if (!pageTotalVal) return;
     const pageSum = currentList.reduce((a,b)=>a+(b.pageNum||1),0);
-    pageTotalVal.textContent = pageSum.toLocaleString();
+    pageTotalVal.textContent = `${pageSum.toLocaleString()}`;
   }
 
   // ===== 필터 적용 =====
   function applyFilters() {
     updateLocaleBoxByRegion();
-
     const rset = getChecked(regionBox);
     const pset = getChecked(projBox);
     const oset = getChecked(ownerGrpBox);
     const mset = getChecked(monthBox);
-
     rows = allRows.filter((r) => {
       if (rset.size && !rset.has(r.region)) return false;
       if (pset.size && !pset.has(r.locale)) return false;
@@ -522,7 +509,6 @@
       if (mset.size && !(r.month && mset.has(r.month))) return false;
       return true;
     });
-
     renderAll();
   }
 
@@ -535,46 +521,37 @@
     if (elNew) elNew.textContent = k.newCnt.toLocaleString();
     const elInp = document.querySelector("#kpi-inp .val");
     if (elInp) elInp.textContent = k.inProg.toLocaleString();
-
     renderStatusDonut();
     renderTitleStatusChart();
     renderSummaryForSelectedTitle();
     renderTable();
   }
 
-  // ===== 테이블 렌더 =====
+  // ===== 상세 테이블 =====
   function renderTable() {
     const base = selectedStatus ? rows.filter(r => r.statusGrp === selectedStatus) : rows;
     const list0 = selectedTitle ? base.filter(r => r.title === selectedTitle) : base;
-
-    // 상세리스트 Status select 필터
     const list = list0.filter(r => {
       if (!detailStatusFilter) return true;
       return r.statusGrp === detailStatusFilter;
     });
-
-    // ✅ 상세 상단 Page# Total
     updateDetailPageTotalBadge(list);
-
     tbody.innerHTML = "";
     list.forEach(r => {
       const isCancelled = r.statusGrp === '취소';
       const lastCmt = (r.lastComment || '').trim();
       const cancelReason = (r.cancelReason || '').trim();
-
       const showBtn = isCancelled || lastCmt.length > 0;
-
       let btnHtml = '';
       if (showBtn) {
         const tipText = isCancelled ? cancelReason : lastCmt;
         const btnLabel = isCancelled ? '!' : 'i';
-        btnHtml = `
-          <button class="tip-btn ${isCancelled ? 'danger' : ''}"
-            title="${escapeHtml(tipText || '메모 없음')}"
-            data-tip="${escapeHtml(tipText || '메모 없음')}">${btnLabel}
-          </button>`;
+        btnHtml = `<button class="tip-btn ${isCancelled ? 'danger' : ''}" title="${escapeHtml(tipText || '메모 없음')}" data-tip="${escapeHtml(tipText || '메모 없음')}">${btnLabel}</button>`;
       }
-
+      const wpl = getWPLByLocale(r.locale);
+      const wplName = wpl?.name || "-";
+      const wplEmail = wpl?.email || "";
+      const emailBtnHtml = wplEmail ? `<button class="tip-btn" title="${escapeHtml(wplEmail)}" data-tip="${escapeHtml(wplEmail)}">@</button>` : "";
       const tr = document.createElement("tr");
       tr.className = "row";
       tr.innerHTML = `
@@ -582,22 +559,16 @@
         <td>${escapeHtml(r.locale)}</td>
         <td>${escapeHtml(r.ownerGrp)}</td>
         <td>${r.date ? r.date.toISOString().slice(0, 10) : ""}</td>
-        <td>
-          <span class="chip">
-            ${escapeHtml(r.statusGrp)}
-            ${btnHtml}
-          </span>
-        </td>
+        <td><span class="chip">${escapeHtml(r.statusGrp)}${btnHtml}</span></td>
         <td>${escapeHtml(r.pageNo || "-")}</td>
-        <td title="${escapeHtml(r.title)}">
-          ${escapeHtml(r.title.length > 60 ? r.title.slice(0, 59) + "…" : r.title)}
-        </td>
+        <td><span class="chip">${escapeHtml(wplName)}${emailBtnHtml}</span></td>
+        <td title="${escapeHtml(r.title)}">${escapeHtml(r.title.length > 60 ? r.title.slice(0, 59) + "…" : r.title)}</td>
       `;
       tbody.appendChild(tr);
     });
   }
 
-  // ===== 이벤트 바인딩 =====
+  // ===== 이벤트 =====
   const excelInput = document.getElementById("excelInput");
   if (excelInput) {
     excelInput.addEventListener("change", async (e) => {
@@ -606,7 +577,6 @@
       await loadFile(f);
     });
   }
-
   document.addEventListener("click", (e) => {
     const btn = e.target.closest(".btn-mini");
     if (!btn) return;
@@ -617,7 +587,6 @@
     box.querySelectorAll('input[type="checkbox"]').forEach((cb) => (cb.checked = false));
     applyFilters();
   });
-
   clearStatus?.addEventListener("click", () => {
     selectedStatus = null;
     statusBadge.style.display = "none";
@@ -633,84 +602,62 @@
     renderSummaryForSelectedTitle();
     renderTable();
   });
-
   detailStatusSel?.addEventListener("change", (e) => {
     detailStatusFilter = e.target.value || "";
-    renderSummaryForSelectedTitle(); // 상태 바뀌면 요약 내 비율은 그대로(선택 제목 기준)이나, 총합은 동일함
+    renderSummaryForSelectedTitle();
     renderTable();
   });
-
   function resetFilters() {
     [regionBox, projBox, ownerGrpBox, monthBox].forEach(box => {
       if (!box) return;
       box.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
     });
-
     selectedStatus = null;
     selectedTitle  = null;
     detailStatusFilter = "";
     if (detailStatusSel) detailStatusSel.value = "";
-
     if (statusBadge) statusBadge.style.display = "none";
     if (titleBadge)  titleBadge.style.display  = "none";
-
     rows = allRows.slice();
     renderAll();
   }
   resetBtn?.addEventListener('click', resetFilters);
-
-  // ===== Tip 버튼 =====
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('.tip-btn');
     if (!btn) return;
     if (!commentPop || !commentPopTitle || !commentPopText) return;
-
     const msg = btn.dataset.tip || '내용 없음';
     const isCancelled = btn.classList.contains('danger');
-
-    commentPopTitle.textContent = isCancelled ? 'Cancelled Reason' : 'Last Comment';
+    const isEmail = btn.textContent?.trim() === '@';
+    commentPopTitle.textContent = isEmail ? 'Email' : (isCancelled ? 'Cancelled Reason' : 'Last Comment');
     commentPopText.textContent  = msg;
     const rect = btn.getBoundingClientRect();
     const margin = 8;
     const pad = 12;
     const vpW = document.documentElement.clientWidth;
     const vpH = document.documentElement.clientHeight;
-
     let top  = rect.top - 4;
     let left = rect.left + rect.width + margin;
     commentPop.style.visibility = 'hidden';
     commentPop.style.display = 'block';
-
     const popW = commentPop.offsetWidth;
     const popH = commentPop.offsetHeight;
-
-    if (left + popW + pad > vpW) {
-      left = Math.max(margin, rect.left - popW - margin);
-    }
-
-    if (top + popH + pad > vpH) {
-      top = Math.max(margin, vpH - popH - pad);
-    }
+    if (left + popW + pad > vpW) left = Math.max(margin, rect.left - popW - margin);
+    if (top + popH + pad > vpH)  top  = Math.max(margin, vpH - popH - pad);
     commentPop.style.top  = `${top}px`;
     commentPop.style.left = `${left}px`;
     commentPop.style.visibility = 'visible';
-
   });
-
-
   document.addEventListener('click', (e) => {
     if (!commentPop) return;
     const isTipBtn  = e.target.closest('.tip-btn');
     const insidePop = e.target.closest('#commentPop');
-    if (!isTipBtn && !insidePop) {
-      commentPop.style.display = 'none';
-    }
+    if (!isTipBtn && !insidePop) commentPop.style.display = 'none';
   });
-
   window.addEventListener('scroll', () => {
     if (commentPop && commentPop.style.display === 'block') commentPop.style.display = 'none';
   });
 
-  // ===== 초기: 빈 필터 UI만 렌더 =====
+  // ===== 초기 =====
   renderFilters([]);
 })();
