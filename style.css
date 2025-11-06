@@ -387,9 +387,10 @@ table select {
   white-space:nowrap;
   vertical-align:bottom;
 }
-.chip .tip-btn{ 
+.chip{ 
 	display: flex;
     align-items: center;
     gap: 6px;
 }
+
 
