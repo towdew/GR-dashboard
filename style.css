@@ -379,3 +379,12 @@ table select {
 #pageTotalBadge {
 	white-space: nowrap;
 }
+.wpl-name{
+  display:inline-block;
+  max-width:160px;         /* 필요시 조절 */
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  vertical-align:bottom;
+}
+.chip .tip-btn{ margin-left:6px; }
