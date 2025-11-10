@@ -2,7 +2,7 @@
 (function () {
   // ====== External URLs ======
   const DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS7WIgpgiy-yAbJNaLbF3Vm4p9qPxi_WpHtW8yWi4MeCUigElvsY7y3T-E6OG5kIxH711SSwfBPtFG7/pub?gid=0&single=true&output=csv";
-  const WPL_JSON_URL = "wpllist.json";
+  const LDM_JSON_URL = "ldmList.json";
 
   // ===== 상태 =====
   let allRows = [], rows = [];
@@ -46,7 +46,7 @@
   let wplInfoByLocale = {};
   async function loadWPLJson() {
     try {
-      const res = await fetch(WPL_JSON_URL, { cache: "no-store" });
+      const res = await fetch(LDM_JSON_URL, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       wplInfoByLocale = await res.json();
       console.log("WPL JSON loaded:", Object.keys(wplInfoByLocale).length);
@@ -562,3 +562,4 @@
   // ===== 초기 =====
   renderFilters([]);
 })();
+
